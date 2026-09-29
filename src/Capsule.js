@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { useTheme } from "./ThemeContext";
+import BottomNav from "./BottomNav";
 
 const FONT = "'Quicksand', sans-serif";
 const HEADING_FONT = "'Playfair Display', serif";
@@ -7,10 +8,7 @@ const HEADING_FONT = "'Playfair Display', serif";
 function isOneYearAgoToday(dateString) {
   const logDate = new Date(dateString);
   const today = new Date();
-  const sameDay = logDate.getDate() === today.getDate();
-  const sameMonth = logDate.getMonth() === today.getMonth();
-  const yearBefore = logDate.getFullYear() === today.getFullYear() - 1;
-  return sameDay && sameMonth && yearBefore;
+  return logDate.getDate() === today.getDate() && logDate.getMonth() === today.getMonth() && logDate.getFullYear() === today.getFullYear() - 1;
 }
 
 function relativeLabel(dateString) {
@@ -25,9 +23,19 @@ function relativeLabel(dateString) {
   return Math.floor(diffDays / 30) + " months ago";
 }
 
+function summaryText(log) {
+  if (log.items && log.items.length > 0) {
+    return log.items.map(function (i) { return i.name; }).join(", ");
+  }
+  return log.anchorItem || "logged outfit";
+}
+
 export default function Capsule(props) {
   const goToTab = props.goToTab;
+  const preferences = props.preferences;
   const THEME = useTheme();
+
+  const [selected, setSelected] = useState(null);
 
   const allLogs = JSON.parse(localStorage.getItem("fitcastLogs") || "[]").reverse();
   const yearAgoEntry = allLogs.find(function (log) { return isOneYearAgoToday(log.date); });
@@ -38,27 +46,38 @@ export default function Capsule(props) {
     header: { padding: "24px 20px 4px" },
     title: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: "22px", margin: 0, color: "#000" },
     subtitle: { fontSize: "12px", color: "#888780", margin: "4px 0 16px" },
-    highlightCard: { background: THEME.accent, borderRadius: "16px", padding: "14px", margin: "0 20px 16px" },
+    highlightCard: { background: THEME.accent, borderRadius: "16px", padding: "14px", margin: "0 20px 16px", border: "none", width: "calc(100% - 40px)", textAlign: "left", cursor: "pointer" },
     highlightLabel: { fontSize: "12px", color: "#fff", fontWeight: 600, margin: "0 0 10px" },
     photoRow: { display: "flex", gap: "8px", marginBottom: "10px" },
-    photoBoxDark: { background: "rgba(255,255,255,0.3)", borderRadius: "10px", flex: 1, height: "56px" },
+    photoBox: { borderRadius: "10px", flex: 1, aspectRatio: "1 / 1", overflow: "hidden", background: "rgba(255,255,255,0.3)" },
+    photoImg: { width: "100%", height: "100%", objectFit: "cover" },
     highlightMeta: { fontSize: "11px", color: "#fff", margin: 0 },
     entryLabel: { fontSize: "12px", color: "#5F5E5A", margin: "0 20px 8px" },
-    entryCard: { background: THEME.white, borderRadius: "14px", padding: "12px", margin: "0 20px 12px", display: "flex", alignItems: "center", gap: "10px" },
-    entryPhoto: { background: "#E4E4E0", borderRadius: "10px", width: "48px", height: "48px" },
+    entryCard: { background: THEME.white, borderRadius: "14px", padding: "12px", margin: "0 20px 12px", display: "flex", alignItems: "center", gap: "10px", border: "none", width: "calc(100% - 40px)", textAlign: "left", cursor: "pointer" },
+    entryPhoto: { background: "#E4E4E0", borderRadius: "10px", width: "48px", height: "48px", flexShrink: 0, overflow: "hidden" },
+    entryPhotoImg: { width: "100%", height: "100%", objectFit: "cover" },
     entryText: { fontSize: "12px", color: "#5F5E5A" },
     empty: { textAlign: "center", color: "#888780", fontSize: "13px", padding: "40px 20px" },
-    nav: { position: "fixed", bottom: 0, left: 0, right: 0, background: THEME.card, display: "flex", justifyContent: "space-around", padding: "10px 0" },
+    overlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 10 },
+    sheet: { background: THEME.white, width: "100%", maxWidth: "480px", borderRadius: "20px 20px 0 0", padding: "20px", fontFamily: FONT, maxHeight: "80vh", overflowY: "auto", boxSizing: "border-box" },
+    sheetDate: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: "18px", margin: "0 0 4px", color: "#000" },
+    sheetWeather: { fontSize: "13px", color: "#5F5E5A", margin: "0 0 14px" },
+    sheetGrid: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "6px" },
+    sheetPhoto: { width: "100%", aspectRatio: "1 / 1", objectFit: "cover", borderRadius: "10px" },
+    sheetName: { fontSize: "11px", color: "#5F5E5A", margin: "4px 0 0", textAlign: "center" },
+    sheetClose: { width: "100%", background: "none", color: "#888780", border: "none", padding: "14px 0 0", fontSize: "12px", cursor: "pointer", fontFamily: FONT },
   };
 
-  function navItemStyle(active) {
-    return { display: "flex", flexDirection: "column", alignItems: "center", fontSize: "10px", color: active ? "#173404" : "#888780", fontWeight: active ? 600 : 400, background: "none", border: "none", cursor: "pointer", fontFamily: FONT };
+  function renderPhotos(log) {
+    const list = log.items && log.items.length > 0 ? log.items.slice(0, 3) : [];
+    if (list.length === 0) return <div style={styles.photoBox}></div>;
+    return list.map(function (it, i) {
+      return <div key={i} style={styles.photoBox}><img src={it.photo} alt="" style={styles.photoImg} /></div>;
+    });
   }
 
   let weatherText = "";
-  if (yearAgoEntry && yearAgoEntry.weather) {
-    weatherText = yearAgoEntry.weather.label + ", " + yearAgoEntry.weather.tempF + "°F";
-  }
+  if (yearAgoEntry && yearAgoEntry.weather) weatherText = yearAgoEntry.weather.label + ", " + yearAgoEntry.weather.tempF + "°F";
 
   return (
     <div style={styles.page}>
@@ -68,15 +87,11 @@ export default function Capsule(props) {
       </div>
 
       {yearAgoEntry && (
-        <div style={styles.highlightCard}>
+        <button style={styles.highlightCard} onClick={function () { setSelected(yearAgoEntry); }}>
           <p style={styles.highlightLabel}>a year ago today</p>
-          <div style={styles.photoRow}>
-            <div style={styles.photoBoxDark}></div>
-            <div style={styles.photoBoxDark}></div>
-            <div style={styles.photoBoxDark}></div>
-          </div>
+          <div style={styles.photoRow}>{renderPhotos(yearAgoEntry)}</div>
           <p style={styles.highlightMeta}>{weatherText}</p>
-        </div>
+        </button>
       )}
 
       {regularLogs.length === 0 && !yearAgoEntry && (
@@ -84,28 +99,42 @@ export default function Capsule(props) {
       )}
 
       {regularLogs.map(function (log, i) {
-        let logText = "outfit";
-        if (log.anchorItem) logText = log.anchorItem;
+        let logText = summaryText(log);
         if (log.weather) logText = logText + " · " + log.weather.label + ", " + log.weather.tempF + "°F";
+        const firstPhoto = log.items && log.items[0] ? log.items[0].photo : null;
 
         return (
           <div key={i}>
             <p style={styles.entryLabel}>{relativeLabel(log.date)}</p>
-            <div style={styles.entryCard}>
-              <div style={styles.entryPhoto}></div>
+            <button style={styles.entryCard} onClick={function () { setSelected(log); }}>
+              <div style={styles.entryPhoto}>{firstPhoto && <img src={firstPhoto} alt="" style={styles.entryPhotoImg} />}</div>
               <span style={styles.entryText}>{logText}</span>
-            </div>
+            </button>
           </div>
         );
       })}
 
-      <div style={styles.nav}>
-        <button style={navItemStyle(false)} onClick={function () { goToTab("Home"); }}><span>🏠</span><span>Home</span></button>
-        <button style={navItemStyle(false)} onClick={function () { goToTab("Closet"); }}><span>👗</span><span>Closet</span></button>
-        <button style={navItemStyle(true)} onClick={function () { goToTab("Capsule"); }}><span>🕐</span><span>Capsule</span></button>
-        <button style={navItemStyle(false)} onClick={function () { goToTab("Hook"); }}><span>💬</span><span>Hook</span></button>
-        <button style={navItemStyle(false)} onClick={function () { goToTab("Profile"); }}><span>👤</span><span>Profile</span></button>
-      </div>
+      {selected && (
+        <div style={styles.overlay} onClick={function () { setSelected(null); }}>
+          <div style={styles.sheet} onClick={function (e) { e.stopPropagation(); }}>
+            <p style={styles.sheetDate}>{new Date(selected.date).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
+            {selected.weather && <p style={styles.sheetWeather}>{selected.weather.label}, {selected.weather.tempF}°F{selected.vibe ? " · " + selected.vibe : ""}</p>}
+            <div style={styles.sheetGrid}>
+              {(selected.items || []).map(function (it, i) {
+                return (
+                  <div key={i}>
+                    <img src={it.photo} alt="" style={styles.sheetPhoto} />
+                    <p style={styles.sheetName}>{it.name}</p>
+                  </div>
+                );
+              })}
+            </div>
+            <button style={styles.sheetClose} onClick={function () { setSelected(null); }}>Close</button>
+          </div>
+        </div>
+      )}
+
+      <BottomNav activeTab="Capsule" goToTab={goToTab} showHook={!!(preferences && preferences.askHookEnabled)} />
     </div>
   );
 }

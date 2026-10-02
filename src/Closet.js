@@ -6,6 +6,26 @@ import BottomNav from "./BottomNav";
 const FONT = "'Quicksand', sans-serif";
 const HEADING_FONT = "'Playfair Display', serif";
 
+function getMostWornName(logs) {
+  const counts = {};
+  logs.forEach(function (log) {
+    (log.items || []).forEach(function (entry) {
+      counts[entry.name] = (counts[entry.name] || 0) + 1;
+    });
+  });
+  const names = Object.keys(counts);
+  if (names.length === 0) return null;
+  const topName = names.reduce(function (a, b) { return counts[a] >= counts[b] ? a : b; });
+  return counts[topName] > 1 ? topName : null;
+}
+
+function getMostNeglectedName(items) {
+  if (items.length === 0) return null;
+  const sorted = items.slice().sort(function (a, b) { return b.daysSinceWorn - a.daysSinceWorn; });
+  const top = sorted[0];
+  return top && top.daysSinceWorn >= 14 ? top.name : null;
+}
+
 export default function Closet(props) {
   const items = props.items;
   const goToTab = props.goToTab;
@@ -15,6 +35,12 @@ export default function Closet(props) {
 
   const [activeCategory, setActiveCategory] = useState("ALL");
   const [customCategories, setCustomCategories] = useState([]);
+
+  const allLogs = JSON.parse(localStorage.getItem("fitcastLogs") || "[]");
+  const favorites = JSON.parse(localStorage.getItem("fitcastFavorites") || "[]");
+  const setCount = items.filter(function (i) { return i.isSet; }).length;
+  const mostWornName = getMostWornName(allLogs);
+  const mostNeglectedName = getMostNeglectedName(items);
 
   const allCategories = CATEGORIES.concat(
     customCategories.map(function (c) { return { key: c, label: c.toLowerCase() }; })
@@ -34,10 +60,15 @@ export default function Closet(props) {
 
   const styles = {
     page: { background: THEME.bg, minHeight: "100vh", fontFamily: FONT, paddingBottom: "80px" },
-    header: { padding: "24px 20px 4px" },
+    header: { padding: "24px 20px 8px" },
     title: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: "22px", margin: 0, color: "#000" },
-    subtitle: { fontSize: "12px", color: "#888780", margin: "4px 0 16px" },
-    chipRow: { display: "flex", gap: "6px", flexWrap: "wrap", padding: "0 20px 16px" },
+    statsGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", padding: "6px 20px" },
+    statChip: { background: THEME.white, borderRadius: "10px", padding: "7px 6px", textAlign: "center" },
+    statNumber: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: "14px", color: THEME.accent, margin: 0 },
+    statLabel: { fontSize: "9px", color: "#888780", margin: "1px 0 0" },
+    noteRow: { padding: "0 20px 12px" },
+    noteLine: { fontSize: "11px", color: "#5F5E5A", margin: "2px 0" },
+    chipRow: { display: "flex", gap: "6px", flexWrap: "wrap", padding: "4px 20px 16px" },
     grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", padding: "0 20px" },
     card: { background: THEME.white, borderRadius: "14px", padding: "10px", position: "relative", textAlign: "left", border: "none", cursor: "pointer" },
     photoImg: { width: "100%", aspectRatio: "1 / 1", objectFit: "cover", borderRadius: "10px", marginBottom: "8px" },
@@ -58,8 +89,33 @@ export default function Closet(props) {
     <div style={styles.page}>
       <div style={styles.header}>
         <p style={styles.title}>Your closet</p>
-        <p style={styles.subtitle}>{items.length} items · {items.filter(function (i) { return i.isSet; }).length} sets</p>
       </div>
+
+      <div style={styles.statsGrid}>
+        <div style={styles.statChip}>
+          <p style={styles.statNumber}>{items.length}</p>
+          <p style={styles.statLabel}>items</p>
+        </div>
+        <div style={styles.statChip}>
+          <p style={styles.statNumber}>{setCount}</p>
+          <p style={styles.statLabel}>sets</p>
+        </div>
+        <div style={styles.statChip}>
+          <p style={styles.statNumber}>{allLogs.length}</p>
+          <p style={styles.statLabel}>logged</p>
+        </div>
+        <div style={styles.statChip}>
+          <p style={styles.statNumber}>{favorites.length}</p>
+          <p style={styles.statLabel}>favorites</p>
+        </div>
+      </div>
+
+      {(mostWornName || mostNeglectedName) && (
+        <div style={styles.noteRow}>
+          {mostWornName && <p style={styles.noteLine}>Most worn lately: {mostWornName}</p>}
+          {mostNeglectedName && <p style={styles.noteLine}>Could use some love: {mostNeglectedName}</p>}
+        </div>
+      )}
 
       <div style={styles.chipRow}>
         {allCategories.map(function (cat) {
@@ -96,7 +152,7 @@ export default function Closet(props) {
 
       <button style={styles.addButton} onClick={function () { goToTab("AddItem"); }}>+ add item or set</button>
 
-      <BottomNav activeTab="Closet" goToTab={goToTab} showHook={!!(preferences && preferences.askHookEnabled)} />
+      <BottomNav activeTab="Closet" goToTab={goToTab} showHook={!!(preferences && preferences.askHookEnabled !== false)} />
     </div>
   );
 }

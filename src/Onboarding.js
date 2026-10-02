@@ -10,7 +10,6 @@ const THEME = {
 
 export default function Onboarding({ onComplete }) {
   const [step, setStep] = useState(0);
-
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [closetStructure, setClosetStructure] = useState("BOTH");
@@ -46,6 +45,7 @@ export default function Onboarding({ onComplete }) {
         .map((c) => c.trim())
         .filter(Boolean),
       notificationTime,
+      askHookEnabled: true,
       onboardingComplete: true,
     };
 
@@ -169,7 +169,7 @@ export default function Onboarding({ onComplete }) {
             />
             <input
               style={styles.input}
-              placeholder="Your email"
+              placeholder="Your email (shown in your profile, no account created)"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />

@@ -15,6 +15,10 @@ function leastWorn(list) {
   return list.reduce(function (a, b) { return a.daysSinceWorn > b.daysSinceWorn ? a : b; });
 }
 
+// Tries to match the weather first, falls back to anything neutral,
+// and if still nothing, falls back to literally any item in the list
+// rather than returning nothing. An empty closet category is the only
+// real reason this should ever return null.
 function pickForWeather(list, weather) {
   if (!list.length) return null;
   const matching = weather ? list.filter(function (i) { return i.weatherTags && i.weatherTags.indexOf(weather.condition) !== -1; }) : [];
@@ -24,8 +28,6 @@ function pickForWeather(list, weather) {
   return leastWorn(list);
 }
 
-// The anchor is the reason for the day's pick: a weather-relevant piece
-// that hasn't been worn in a while. Only weather-tied items qualify.
 export function pickAnchorItem(items, weather) {
   if (!weather) return null;
   const candidates = items.filter(function (item) { return item.weatherTags && item.weatherTags.indexOf(weather.condition) !== -1; });
@@ -33,9 +35,7 @@ export function pickAnchorItem(items, weather) {
   return leastWorn(candidates);
 }
 
-// Builds a real outfit: a set, or a color-compatible top and bottom,
-// plus a layer or accessory depending on the vibe, plus shoes.
-export function buildOutfit(items, weather, vibeText, prefs) {
+export function buildOutfit(items, weather, vibeText, prefs, styleLevel) {
   prefs = prefs || {};
   const rules = rulesForVibe(vibeText);
   const avoid = (prefs.colorsToAvoid || []).map(function (c) { return c.toLowerCase(); }).filter(Boolean);
@@ -51,7 +51,8 @@ export function buildOutfit(items, weather, vibeText, prefs) {
   const layers = usable.filter(function (i) { return i.category === "TOP" && i.isLayer; });
   const bottoms = usable.filter(function (i) { return i.category === "BOTTOM"; });
   const shoes = usable.filter(function (i) { return i.category === "SHOES"; });
-  const accessories = usable.filter(function (i) { return ["JEWELRY", "BAG", "BELT", "HAT"].indexOf(i.category) !== -1; });
+  const jewelryOrHats = usable.filter(function (i) { return i.category === "JEWELRY" || i.category === "HAT"; });
+  const bagsOrBelts = usable.filter(function (i) { return i.category === "BAG" || i.category === "BELT"; });
   const heads = usable.filter(function (i) { return i.category === "HEAD_COVERING"; });
 
   const pieces = [];
@@ -63,7 +64,18 @@ export function buildOutfit(items, weather, vibeText, prefs) {
     pieces.push(pickForWeather(sets, weather));
   } else {
     let top = anchor && anchor.category === "TOP" && !anchor.isLayer ? anchor : pickForWeather(tops, weather);
-    if (!top) { top = pickForWeather(layers, weather); baseIsLayer = true; }
+
+    // Final fallback: if there's still no top, but there IS something
+    // wearable as a top (including layer pieces), use it rather than
+    // showing an outfit with no top at all.
+    if (!top) {
+      const anyTop = tops.concat(layers);
+      if (anyTop.length > 0) {
+        top = pickForWeather(anyTop, weather);
+        baseIsLayer = !!(top && top.isLayer);
+      }
+    }
+
     let bottom = anchor && anchor.category === "BOTTOM" ? anchor : pickForWeather(bottoms, weather);
     if (top && bottom && !colorsCompatible(top.color, bottom.color)) {
       const altBottom = bottoms.find(function (b) { return colorsCompatible(top.color, b.color); });
@@ -74,7 +86,8 @@ export function buildOutfit(items, weather, vibeText, prefs) {
   }
 
   const wantsLayerForWeather = weather && ["cold", "rainy", "drizzle", "snowy"].indexOf(weather.condition) !== -1;
-  if (!baseIsLayer && layers.length > 0 && (rules.wantsLayer || wantsLayerForWeather)) {
+  const occasionWantsLayer = styleLevel === "basic" ? false : (rules.wantsLayer || styleLevel === "stylish");
+  if (!baseIsLayer && layers.length > 0 && (occasionWantsLayer || wantsLayerForWeather)) {
     const baseColor = pieces[0] ? pieces[0].color : null;
     const layer = anchor && anchor.category === "TOP" && anchor.isLayer ? anchor : pickForWeather(layers, weather);
     if (layer && pieces.indexOf(layer) === -1 && (!baseColor || colorsCompatible(layer.color, baseColor))) pieces.push(layer);
@@ -83,9 +96,14 @@ export function buildOutfit(items, weather, vibeText, prefs) {
   const shoe = anchor && anchor.category === "SHOES" ? anchor : pickForWeather(shoes, weather);
   if (shoe && pieces.indexOf(shoe) === -1) pieces.push(shoe);
 
-  if (rules.wantsAccessory && accessories.length > 0) {
-    const acc = pickForWeather(accessories, weather);
-    if (acc && pieces.indexOf(acc) === -1) pieces.push(acc);
+  const wantsAccessory = styleLevel === "basic" ? false : (rules.wantsAccessory || styleLevel === "stylish");
+  if (wantsAccessory) {
+    const acc1 = pickForWeather(jewelryOrHats, weather);
+    if (acc1 && pieces.indexOf(acc1) === -1) pieces.push(acc1);
+    if (styleLevel === "stylish") {
+      const acc2 = pickForWeather(bagsOrBelts, weather);
+      if (acc2 && pieces.indexOf(acc2) === -1) pieces.push(acc2);
+    }
   }
 
   if (prefs.headCoveringMatchingEnabled && heads.length > 0) {

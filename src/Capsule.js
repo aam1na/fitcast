@@ -134,7 +134,7 @@ export default function Capsule(props) {
         </div>
       )}
 
-      <BottomNav activeTab="Capsule" goToTab={goToTab} showHook={!!(preferences && preferences.askHookEnabled)} />
+      <BottomNav activeTab="Capsule" goToTab={goToTab} showHook={!!(preferences && preferences.askHookEnabled !== false)} />
     </div>
   );
 }

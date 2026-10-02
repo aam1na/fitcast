@@ -19,6 +19,7 @@ export default function Profile(props) {
   const onLogout = props.onLogout;
   const THEME = useTheme();
   const fileInputRef = useRef(null);
+  const importInputRef = useRef(null);
 
   const selectedTheme = preferences.themeChoice || "blue";
 
@@ -60,13 +61,76 @@ export default function Profile(props) {
     updatePref("units", preferences.units === "CELSIUS" ? "FAHRENHEIT" : "CELSIUS");
   }
 
-  function editLocation() {
-    const newLocation = prompt("Set your location:", preferences.location || "");
-    if (newLocation !== null) updatePref("location", newLocation);
+  async function editLocation() {
+    const cityName = prompt("Enter your city (e.g. Houston, or Houston, TX):", preferences.location || "");
+    if (!cityName) return;
+    try {
+      const res = await fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(cityName) + "&count=1");
+      const data = await res.json();
+      if (data.results && data.results[0]) {
+        const r = data.results[0];
+        const display = r.name + (r.admin1 ? ", " + r.admin1 : "") + (r.country ? ", " + r.country : "");
+        const updated = Object.assign({}, preferences, { location: display, locationLat: r.latitude, locationLon: r.longitude });
+        onUpdate(updated);
+      } else {
+        alert("Couldn't find that location. Try a nearby bigger city.");
+      }
+    } catch (e) {
+      alert("Couldn't reach the location service. Try again in a moment.");
+    }
   }
 
   function showAbout() {
-    alert("Fitcast, built for the AWS Zero to Shipped Hackathon.\nVersion 0.1");
+    alert(
+      "Fitcast, built for the AWS Zero to Shipped Hackathon.\n\n" +
+      "Home: your daily outfit, built from your real closet and today's weather.\n" +
+      "Closet: your clothes. Tap an item to view, edit, or delete it.\n" +
+      "Explore: browse outfit ideas by occasion, from your own pieces.\n" +
+      "Hook: ask for an outfit in plain words, like 'what should I wear to brunch'.\n" +
+      "Capsule: every outfit you've logged, with a yearly throwback.\n" +
+      "Favorites and My Fits: outfits you've saved to wear again.\n\n" +
+      "Set your location and theme below. Export your data before clearing it so you can bring it to a new device."
+    );
+  }
+
+  function exportData() {
+    const payload = {
+      fitcastPreferences: localStorage.getItem("fitcastPreferences"),
+      fitcastItems: localStorage.getItem("fitcastItems"),
+      fitcastLogs: localStorage.getItem("fitcastLogs"),
+      fitcastSavedFits: localStorage.getItem("fitcastSavedFits"),
+      fitcastFavorites: localStorage.getItem("fitcastFavorites"),
+    };
+    const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "fitcast-backup.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function triggerImport() {
+    importInputRef.current.click();
+  }
+
+  function handleImportFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () {
+      try {
+        const payload = JSON.parse(reader.result);
+        Object.keys(payload).forEach(function (key) {
+          if (payload[key]) localStorage.setItem(key, payload[key]);
+        });
+        alert("Data loaded. The app will now refresh.");
+        window.location.reload();
+      } catch (err) {
+        alert("That file didn't look like a Fitcast backup.");
+      }
+    };
+    reader.readAsText(file);
   }
 
   const styles = {
@@ -84,7 +148,7 @@ export default function Profile(props) {
     rowLabel: { fontSize: "13px", color: "#173404" },
     rowSubLabel: { fontSize: "11px", color: "#888780", marginTop: "2px" },
     rowValue: { fontSize: "12px", color: "#888780" },
-    logoutText: { fontSize: "13px", color: THEME.logout },
+    logoutText: { fontSize: "13px", color: THEME.logout || "#B24848" },
     spacer: { height: "16px" },
   };
 
@@ -92,12 +156,18 @@ export default function Profile(props) {
     return { width: 26, height: 26, borderRadius: "50%", background: color, border: active ? "2px solid #173404" : "2px solid transparent", cursor: "pointer", padding: 0 };
   }
 
-  function renderToggle(on, onClick) {
-    const trackStyle = { width: 34, height: 19, borderRadius: "999px", background: on ? THEME.toggleOn : "#A8A8A8", border: "none", position: "relative", cursor: "pointer", padding: 0, flexShrink: 0 };
-    const knobStyle = { width: 15, height: 15, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: on ? 17 : 2 };
+  function toggleStyle(on) {
+    return { width: 34, height: 19, borderRadius: "999px", background: on ? (THEME.toggleOn || "#7AA6B9") : "#A8A8A8", border: "none", position: "relative", cursor: "pointer", padding: 0, flexShrink: 0 };
+  }
+
+  function knobStyle(on) {
+    return { width: 15, height: 15, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: on ? 17 : 2 };
+  }
+
+  function Toggle(tprops) {
     return (
-      <button style={trackStyle} onClick={onClick}>
-        <span style={knobStyle}></span>
+      <button style={toggleStyle(tprops.on)} onClick={tprops.onClick}>
+        <span style={knobStyle(tprops.on)}></span>
       </button>
     );
   }
@@ -121,7 +191,13 @@ export default function Profile(props) {
       <p style={styles.sectionLabel}>THEME</p>
       <div style={styles.themeRow}>
         {THEME_OPTIONS.map(function (opt) {
-          return <button key={opt.key} style={swatchStyle(opt.color, selectedTheme === opt.key)} onClick={function () { updatePref("themeChoice", opt.key); }}></button>;
+          return (
+            <button
+              key={opt.key}
+              style={swatchStyle(opt.color, selectedTheme === opt.key)}
+              onClick={function () { updatePref("themeChoice", opt.key); }}
+            ></button>
+          );
         })}
       </div>
 
@@ -140,17 +216,26 @@ export default function Profile(props) {
       <div style={styles.staticRow}>
         <div>
           <div style={styles.rowLabel}>Ask Hook directly</div>
-          <div style={styles.rowSubLabel}>adds a chat tab</div>
+          <div style={styles.rowSubLabel}>on by default, turn off to hide the chat tab</div>
         </div>
-        {renderToggle(!!preferences.askHookEnabled, function () { updatePref("askHookEnabled", !preferences.askHookEnabled); })}
+        <Toggle
+          on={preferences.askHookEnabled !== false}
+          onClick={function () { updatePref("askHookEnabled", preferences.askHookEnabled === false); }}
+        />
       </div>
       <div style={styles.staticRow}>
         <span style={styles.rowLabel}>Head covering matching</span>
-        {renderToggle(!!preferences.headCoveringMatchingEnabled, function () { updatePref("headCoveringMatchingEnabled", !preferences.headCoveringMatchingEnabled); })}
+        <Toggle
+          on={!!preferences.headCoveringMatchingEnabled}
+          onClick={function () { updatePref("headCoveringMatchingEnabled", !preferences.headCoveringMatchingEnabled); }}
+        />
       </div>
       <div style={styles.staticRow}>
         <span style={styles.rowLabel}>Hairstyle suggestions</span>
-        {renderToggle(!!preferences.hairstyleSuggestionsEnabled, function () { updatePref("hairstyleSuggestionsEnabled", !preferences.hairstyleSuggestionsEnabled); })}
+        <Toggle
+          on={!!preferences.hairstyleSuggestionsEnabled}
+          onClick={function () { updatePref("hairstyleSuggestionsEnabled", !preferences.hairstyleSuggestionsEnabled); }}
+        />
       </div>
 
       <div style={styles.spacer}></div>
@@ -166,11 +251,22 @@ export default function Profile(props) {
       <button style={styles.row} onClick={showAbout}>
         <span style={styles.rowLabel}>About / help</span>
       </button>
+
+      <div style={styles.spacer}></div>
+      <input type="file" accept=".json" ref={importInputRef} style={{ display: "none" }} onChange={handleImportFile} />
+      <button style={styles.row} onClick={exportData}>
+        <span style={styles.rowLabel}>Export my data</span>
+        <span style={styles.rowValue}>download a backup</span>
+      </button>
+      <button style={styles.row} onClick={triggerImport}>
+        <span style={styles.rowLabel}>Import my data</span>
+        <span style={styles.rowValue}>load on a new device</span>
+      </button>
       <button style={styles.row} onClick={onLogout}>
-        <span style={styles.logoutText}>Log out</span>
+        <span style={styles.logoutText}>Clear data and start over</span>
       </button>
 
-      <BottomNav activeTab="Profile" goToTab={goToTab} showHook={!!preferences.askHookEnabled} />
+      <BottomNav activeTab="Profile" goToTab={goToTab} showHook={preferences.askHookEnabled !== false} />
     </div>
   );
 }

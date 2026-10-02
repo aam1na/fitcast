@@ -43,6 +43,10 @@ function getHairstyleSuggestion(weather, prefs) {
   return "Nice weather for wearing " + descriptor + " down or in soft waves today.";
 }
 
+function favoriteKey(pieces) {
+  return pieces.map(function (p) { return p.id; }).sort().join("-");
+}
+
 export default function Home(props) {
   const preferences = props.preferences;
   const items = props.items;
@@ -53,9 +57,11 @@ export default function Home(props) {
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedVibe, setSelectedVibe] = useState(null);
+  const [styleLevel, setStyleLevel] = useState(null);
   const [personas, setPersonas] = useState(DEFAULT_PERSONAS);
   const [recentlyLogged, setRecentlyLogged] = useState([]);
   const [manualPieces, setManualPieces] = useState(null);
+  const [favoritesVersion, setFavoritesVersion] = useState(0);
 
   const fetchWeather = useCallback(function (lat, lon, locationName) {
     function applyWeather(w) { setWeather(w); setLoading(false); if (onWeatherLoaded) onWeatherLoaded(w); }
@@ -71,14 +77,22 @@ export default function Home(props) {
   }, [onWeatherLoaded]);
 
   useEffect(function () {
+    if (preferences && preferences.locationLat && preferences.locationLon) {
+      fetchWeather(preferences.locationLat, preferences.locationLon, preferences.location || "");
+      const interval = setInterval(function () { fetchWeather(preferences.locationLat, preferences.locationLon, preferences.location); }, 15 * 60 * 1000);
+      const saved = localStorage.getItem("fitcastLogs");
+      if (saved) setRecentlyLogged(JSON.parse(saved).slice(-5).reverse());
+      return function () { clearInterval(interval); };
+    }
+
     function getLocationAndFetch() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-          function (pos) { fetchWeather(pos.coords.latitude, pos.coords.longitude, "your area"); },
-          function () { fetchWeather(DEFAULT_LOCATION.lat, DEFAULT_LOCATION.lon, DEFAULT_LOCATION.name); }
+          function (pos) { fetchWeather(pos.coords.latitude, pos.coords.longitude, ""); },
+          function () { fetchWeather(DEFAULT_LOCATION.lat, DEFAULT_LOCATION.lon, ""); }
         );
       } else {
-        fetchWeather(DEFAULT_LOCATION.lat, DEFAULT_LOCATION.lon, DEFAULT_LOCATION.name);
+        fetchWeather(DEFAULT_LOCATION.lat, DEFAULT_LOCATION.lon, "");
       }
     }
     getLocationAndFetch();
@@ -86,13 +100,13 @@ export default function Home(props) {
     const saved = localStorage.getItem("fitcastLogs");
     if (saved) setRecentlyLogged(JSON.parse(saved).slice(-5).reverse());
     return function () { clearInterval(interval); };
-  }, [fetchWeather]);
+  }, [fetchWeather, preferences]);
 
   const built = useMemo(function () {
-    return buildOutfit(items, weather, selectedVibe, preferences);
-  }, [items, weather, selectedVibe, preferences]);
+    return buildOutfit(items, weather, selectedVibe, preferences, styleLevel);
+  }, [items, weather, selectedVibe, preferences, styleLevel]);
 
-  useEffect(function () { setManualPieces(null); }, [selectedVibe, weather, items]);
+  useEffect(function () { setManualPieces(null); }, [selectedVibe, styleLevel, weather, items]);
 
   const pieces = manualPieces || built.pieces;
   const anchor = built.anchor;
@@ -129,8 +143,7 @@ export default function Home(props) {
 
   function logOutfit() {
     const entry = {
-      date: new Date().toISOString(),
-      weather: weather,
+      date: new Date().toISOString(), weather: weather,
       anchorItem: anchor ? anchor.name : (pieces[0] ? pieces[0].name : null),
       vibe: selectedVibe,
       items: pieces.map(function (i) { return { name: i.name, photo: i.photo }; }),
@@ -142,6 +155,27 @@ export default function Home(props) {
     alert("Outfit logged for today!");
   }
 
+  function isFavorited() {
+    if (pieces.length === 0) return false;
+    const key = favoriteKey(pieces);
+    const favs = JSON.parse(localStorage.getItem("fitcastFavorites") || "[]");
+    return favs.some(function (f) { return f.key === key; });
+  }
+
+  function toggleFavorite() {
+    if (pieces.length === 0) return;
+    const key = favoriteKey(pieces);
+    const favs = JSON.parse(localStorage.getItem("fitcastFavorites") || "[]");
+    const existingIndex = favs.findIndex(function (f) { return f.key === key; });
+    if (existingIndex !== -1) {
+      favs.splice(existingIndex, 1);
+    } else {
+      favs.push({ key: key, savedAt: new Date().toISOString(), label: selectedVibe || "today's pick", items: pieces.map(function (i) { return { name: i.name, photo: i.photo }; }) });
+    }
+    localStorage.setItem("fitcastFavorites", JSON.stringify(favs));
+    setFavoritesVersion(favoritesVersion + 1);
+  }
+
   function viewLoggedEntry(log) {
     if (!log) return;
     alert(new Date(log.date).toLocaleDateString() + ": " + (log.anchorItem || "outfit") + (log.weather ? ", " + log.weather.label : ""));
@@ -150,6 +184,7 @@ export default function Home(props) {
   const finishingTouches = getFinishingTouches();
   const hairSuggestion = getHairstyleSuggestion(weather, preferences);
   const recentSlots = recentlyLogged.concat(Array(Math.max(0, 5 - recentlyLogged.length)).fill(null)).slice(0, 5);
+  const favorited = isFavorited();
 
   const styles = {
     page: { background: THEME.bg, minHeight: "100vh", fontFamily: FONT, paddingBottom: "80px" },
@@ -158,8 +193,9 @@ export default function Home(props) {
     avatarPlaceholder: { width: 44, height: 44, borderRadius: "50%", background: "#D9D9D9" },
     dateText: { fontSize: "13px", color: "#5F5E5A", margin: 0, fontFamily: FONT },
     greeting: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: "22px", margin: "2px 0 0", color: "#000" },
-    card: { background: THEME.white, borderRadius: "16px", padding: "16px", margin: "8px 20px 16px" },
+    card: { background: THEME.white, borderRadius: "16px", padding: "16px", margin: "8px 20px 16px", position: "relative" },
     weatherRow: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", fontSize: "13px", color: "#5F5E5A", fontFamily: FONT },
+    heartBtn: { position: "absolute", top: "14px", right: "14px", background: "none", border: "none", fontSize: "20px", cursor: "pointer" },
     grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(70px, 1fr))", gap: "8px", marginBottom: "12px" },
     itemBoxWrap: { position: "relative" },
     refreshBtn: { position: "absolute", bottom: "3px", right: "3px", background: "rgba(255,255,255,0.85)", border: "none", borderRadius: "50%", width: "20px", height: "20px", cursor: "pointer", fontSize: "11px", padding: 0 },
@@ -171,10 +207,10 @@ export default function Home(props) {
     hairCard: { background: THEME.chip, borderRadius: "16px", padding: "14px", margin: "0 20px 16px" },
     hairLabel: { fontSize: "11px", color: "#5F5E5A", marginBottom: "8px", fontFamily: FONT },
     hairText: { fontSize: "12px", color: "#333", fontFamily: FONT, margin: 0 },
-    exploreCard: { background: THEME.card, borderRadius: "16px", padding: "16px", margin: "0 20px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", border: "none", width: "calc(100% - 40px)" },
+    exploreCard: { background: THEME.card, borderRadius: "16px", padding: "16px", margin: "4px 20px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", border: "none", width: "calc(100% - 40px)" },
     exploreText: { fontSize: "13px", fontWeight: 600, color: "#173404", fontFamily: FONT },
     sectionLabel: { fontFamily: HEADING_FONT, fontSize: "16px", fontWeight: 700, color: "#333", margin: "0 20px 10px" },
-    chipRow: { display: "flex", gap: "8px", flexWrap: "wrap", margin: "0 20px 20px" },
+    chipRow: { display: "flex", gap: "8px", flexWrap: "wrap", margin: "0 20px 14px" },
     recentRow: { display: "flex", gap: "8px", margin: "0 20px 20px" },
     recentBox: { background: THEME.white, borderRadius: "10px", width: "48px", height: "48px", border: "none", cursor: "pointer", overflow: "hidden", padding: 0 },
     recentEmpty: { background: THEME.white, borderRadius: "10px", width: "48px", height: "48px", border: "none" },
@@ -185,9 +221,11 @@ export default function Home(props) {
   function itemBoxStyle(isAnchor) {
     return { background: isAnchor ? THEME.chip : "#E4E4E0", border: isAnchor ? "1.5px solid " + THEME.accent : "none", borderRadius: "10px", aspectRatio: "1 / 1", width: "100%", overflow: "hidden" };
   }
-
   function vibeChipStyle(active) {
     return { padding: "7px 13px", borderRadius: "999px", background: active ? THEME.accent : THEME.white, color: active ? "#fff" : "#333", fontSize: "12px", border: active ? "none" : "1px solid " + THEME.chip, cursor: "pointer", fontFamily: FONT };
+  }
+  function styleChipStyle(active) {
+    return { padding: "7px 13px", borderRadius: "999px", background: active ? "#854F0B" : "#FAEEDA", color: active ? "#fff" : "#854F0B", fontSize: "12px", border: "none", cursor: "pointer", fontFamily: FONT, fontWeight: 600 };
   }
 
   return (
@@ -209,6 +247,7 @@ export default function Home(props) {
           <p style={styles.empty}>Add a top, a bottom, and shoes so I have enough to build a look.</p>
         ) : (
           <>
+            <button style={styles.heartBtn} onClick={toggleFavorite} title="Save to favorites">{favorited ? "❤️" : "🤍"}</button>
             <div style={styles.grid}>
               {pieces.map(function (item, i) {
                 return (
@@ -236,9 +275,11 @@ export default function Home(props) {
         <div style={styles.hairCard}><p style={styles.hairLabel}>Hair idea</p><p style={styles.hairText}>{hairSuggestion}</p></div>
       )}
 
-      <button style={styles.exploreCard} onClick={function () { goToTab("Explore"); }}>
-        <span style={styles.exploreText}>Explore outfit ideas</span><span>→</span>
-      </button>
+      <p style={styles.sectionLabel}>How dressed up today?</p>
+      <div style={styles.chipRow}>
+        <button style={styleChipStyle(styleLevel === "basic")} onClick={function () { setStyleLevel(styleLevel === "basic" ? null : "basic"); }}>keep it basic</button>
+        <button style={styleChipStyle(styleLevel === "stylish")} onClick={function () { setStyleLevel(styleLevel === "stylish" ? null : "stylish"); }}>make it stylish</button>
+      </div>
 
       <p style={styles.sectionLabel}>What's the vibe today?</p>
       <div style={styles.chipRow}>
@@ -251,6 +292,10 @@ export default function Home(props) {
         }}>+ add</button>
       </div>
 
+      <button style={styles.exploreCard} onClick={function () { goToTab("Explore"); }}>
+        <span style={styles.exploreText}>Explore outfit ideas</span><span>→</span>
+      </button>
+
       <p style={styles.sectionLabel}>Recently logged</p>
       <div style={styles.recentRow}>
         {recentSlots.map(function (log, i) {
@@ -260,7 +305,7 @@ export default function Home(props) {
         })}
       </div>
 
-      <BottomNav activeTab="Home" goToTab={goToTab} showHook={!!preferences.askHookEnabled} />
+      <BottomNav activeTab="Home" goToTab={goToTab} showHook={preferences.askHookEnabled !== false} />
     </div>
   );
 }

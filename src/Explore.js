@@ -187,7 +187,10 @@ export default function Explore(props) {
           <button style={styles.shuffle} onClick={function () { setSeed(seed + 1); }}>🔄 Shuffle</button>
         </div>
         <p style={styles.subtitle}>outfit ideas made from clothes you already own</p>
-        <button style={styles.fitsLink} onClick={function () { goToTab("SavedFits"); }}>view my saved fits →</button>
+        <div style={{ display: "flex", gap: "16px", marginBottom: "14px" }}>
+          <button style={styles.fitsLink} onClick={function () { goToTab("SavedFits"); }}>view my fits →</button>
+          <button style={styles.fitsLink} onClick={function () { goToTab("Favorites"); }}>view favorites →</button>
+        </div>
       </div>
 
       <div style={styles.chipRow}>
@@ -247,7 +250,15 @@ export default function Explore(props) {
               );
             })}
             <button style={styles.sheetPrimary} onClick={function () { logLook(selected); }}>Log this outfit for today</button>
-            <button style={styles.sheetSecondary} onClick={function () { setSelected(null); }}>Close</button>
+            <button style={styles.sheetSecondary} onClick={function () {
+              const key = selected.items.map(function (i) { return i.id; }).sort().join("-");
+              const favs = JSON.parse(localStorage.getItem("fitcastFavorites") || "[]");
+              if (!favs.some(function (f) { return f.key === key; })) {
+                favs.push({ key: key, savedAt: new Date().toISOString(), label: selected.occasion, items: selected.items.map(function (i) { return { name: i.name, photo: i.photo }; }) });
+                localStorage.setItem("fitcastFavorites", JSON.stringify(favs));
+              }
+              alert("Saved to favorites!");
+            }}>❤️ Save to favorites</button>
           </div>
         </div>
       )}

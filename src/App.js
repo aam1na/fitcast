@@ -10,6 +10,7 @@ import Hook from "./Hook";
 import Explore from "./Explore";
 import SavedFits from "./SavedFits";
 import CreateFit from "./CreateFit";
+import Favorites from "./Favorites";
 import { INITIAL_CLOSET } from "./closetData";
 import { ThemeProvider } from "./ThemeContext";
 
@@ -54,7 +55,7 @@ function App() {
   }
 
   function handleLogout() {
-    const confirmed = window.confirm("Log out? This clears your local data on this device.");
+    const confirmed = window.confirm("This clears everything on this device: closet, logs, favorites, and preferences. Export your data first in Profile if you want to keep it. Continue?");
     if (confirmed) {
       localStorage.clear();
       setPreferences(null);
@@ -99,22 +100,26 @@ function App() {
   } else if (activeTab === "Capsule") {
     screen = <Capsule goToTab={setActiveTab} preferences={preferences} />;
   } else if (activeTab === "Profile") {
-    screen = <Profile preferences={preferences} onUpdate={updatePreferences} goToTab={setActiveTab} onLogout={handleLogout} />;
+    screen = (
+      <Profile
+        preferences={preferences}
+        onUpdate={updatePreferences}
+        goToTab={setActiveTab}
+        onLogout={handleLogout}
+      />
+    );
   } else if (activeTab === "Hook") {
     screen = <Hook items={items} weather={lastWeather} preferences={preferences} goToTab={setActiveTab} />;
   } else if (activeTab === "Explore") {
     screen = <Explore items={items} preferences={preferences} goToTab={setActiveTab} />;
   } else if (activeTab === "SavedFits") {
-    screen = <Explore items={items} preferences={preferences} goToTab={setActiveTab} />;
+    screen = <SavedFits goToTab={setActiveTab} preferences={preferences} />;
+  } else if (activeTab === "CreateFit") {
+    screen = <CreateFit items={items} goToTab={setActiveTab} />;
+  } else if (activeTab === "Favorites") {
+    screen = <Favorites goToTab={setActiveTab} preferences={preferences} />;
   } else {
     screen = <Home preferences={preferences} items={items} goToTab={setActiveTab} onWeatherLoaded={setLastWeather} />;
-  }
-
-  if (activeTab === "SavedFits") {
-    screen = <SavedFits goToTab={setActiveTab} preferences={preferences} />;
-  }
-  if (activeTab === "CreateFit") {
-    screen = <CreateFit items={items} goToTab={setActiveTab} />;
   }
 
   return (

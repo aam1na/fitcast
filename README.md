@@ -16,7 +16,10 @@ Fitcast turns the clothes you already own into a daily outfit that fits the weat
 A shared rules engine (`src/outfitLogic.js`) picks sets or top-and-bottom pairs, checks color compatibility, adds layers for cold or rainy weather, and prefers pieces you haven't worn recently.
 
 ## Built with
-React, Open-Meteo API, Amazon S3, Amazon CloudFront, AWS Amplify Hosting. Deployed with GitHub Copilot connected to AWS.
+React, Open-Meteo API, Amazon S3, Amazon CloudFront, and AWS Amplify Hosting. Deployed with GitHub Copilot connected to AWS.
+
+## What's next
+Closets currently live in the browser. The next step is accounts and cloud-synced closets so users can open their closet on any device. `create_tables.py` is groundwork for that (Amazon DynamoDB) and is not used by the live app yet.
 
 ## Run locally
 npm install
